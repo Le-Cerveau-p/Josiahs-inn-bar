@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": false,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true
+  },
+  "include": [
+    "src/main.tsx",
+    "src/vite-env.d.ts",
+    "src/app/App.tsx",
+    "src/app/routes.tsx",
+    "src/app/context/**/*.tsx",
+    "src/app/lib/**/*.ts",
+    "src/app/pages/**/*.tsx",
+    "src/app/components/layout/**/*.tsx",
+    "src/app/data/**/*.ts"
+  ]
+}
