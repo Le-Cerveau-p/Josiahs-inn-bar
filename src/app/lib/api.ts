@@ -26,6 +26,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  getUsers: () => request("/api/users"),
+  createUser: (body: unknown) => request("/api/users", { method: "POST", body: JSON.stringify(body) }),
+  updateUser: (id: string, body: unknown) => request(`/api/users/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  promoteUser: (id: string) => request(`/api/users/${id}/promote`, { method: "POST" }),
+  demoteUser: (id: string) => request(`/api/users/${id}/demote`, { method: "POST" }),
+  deactivateUser: (id: string) => request(`/api/users/${id}`, { method: "DELETE" }),
   getDrinks: () => request("/api/drinks"),
   createDrink: (body: unknown) => request("/api/drinks", { method: "POST", body: JSON.stringify(body) }),
   updateDrink: (id: string, body: unknown) =>
