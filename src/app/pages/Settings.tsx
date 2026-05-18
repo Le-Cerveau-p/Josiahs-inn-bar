@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import {
   Activity,
   Bell,
-  Database,
+  Edit,
   RefreshCw,
   Save,
   Shield,
@@ -23,30 +23,52 @@ type ManagedUser = {
   updatedAt: string;
 };
 
-type SectionKey = "profile" | "users" | "notifications" | "security" | "backup" | "activity";
+type SectionKey = "profile" | "users" | "notifications" | "security" | "activity";
+type UserFormState = {
+  name: string;
+  email: string;
+  role: "admin" | "user";
+  active: boolean;
+  password: string;
+  confirmPassword: string;
+};
 
-const emptyUserForm = {
+const emptyUserForm: UserFormState = {
   name: "",
   email: "",
-  role: "user" as "admin" | "user",
+  role: "user",
+  active: true,
+  password: "",
+  confirmPassword: "",
 };
 
 export function Settings() {
-  const sectionRefs = {
-    profile: useRef<HTMLDivElement | null>(null),
-    users: useRef<HTMLDivElement | null>(null),
-    notifications: useRef<HTMLDivElement | null>(null),
-    security: useRef<HTMLDivElement | null>(null),
-    backup: useRef<HTMLDivElement | null>(null),
-    activity: useRef<HTMLDivElement | null>(null),
-  };
+  const profileRef = useRef<HTMLDivElement | null>(null);
+  const usersRef = useRef<HTMLDivElement | null>(null);
+  const notificationsRef = useRef<HTMLDivElement | null>(null);
+  const securityRef = useRef<HTMLDivElement | null>(null);
+  const activityRef = useRef<HTMLDivElement | null>(null);
+
+  const sectionOrder = useMemo(
+    () => [
+      { key: "profile" as const, ref: profileRef, label: "Profile Settings" },
+      { key: "users" as const, ref: usersRef, label: "User Management" },
+      { key: "notifications" as const, ref: notificationsRef, label: "Notifications" },
+      { key: "security" as const, ref: securityRef, label: "Security" },
+      { key: "activity" as const, ref: activityRef, label: "Activity Logs" },
+    ],
+    [],
+  );
 
   const [activeSection, setActiveSection] = useState<SectionKey>("profile");
-  const [profile, setProfile] = useState({
-    name: "Admin User",
-    email: "admin@josiahinnbar.com",
-    role: "Administrator",
-  });
+  const [users, setUsers] = useState<ManagedUser[]>([]);
+  const [usersLoading, setUsersLoading] = useState(true);
+  const [usersError, setUsersError] = useState<string | null>(null);
+  const [usersMessage, setUsersMessage] = useState<string | null>(null);
+  const [busyUserId, setBusyUserId] = useState<string | null>(null);
+  const [savingUser, setSavingUser] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState<string>("");
+  const [userForm, setUserForm] = useState<UserFormState>(emptyUserForm);
   const [notifications, setNotifications] = useState({
     lowStock: true,
     dailyReports: true,
@@ -58,13 +80,27 @@ export function Settings() {
     newPassword: "",
     confirmPassword: "",
   });
-  const [users, setUsers] = useState<ManagedUser[]>([]);
-  const [usersLoading, setUsersLoading] = useState(true);
-  const [usersError, setUsersError] = useState<string | null>(null);
-  const [usersMessage, setUsersMessage] = useState<string | null>(null);
-  const [busyUserId, setBusyUserId] = useState<string | null>(null);
-  const [savingUser, setSavingUser] = useState(false);
-  const [userForm, setUserForm] = useState(emptyUserForm);
+
+  const selectedUser = useMemo(
+    () => (selectedUserId && selectedUserId !== "new" ? users.find((user) => user.id === selectedUserId) ?? null : null),
+    [selectedUserId, users],
+  );
+
+  const syncEditorFromUser = useCallback((user: ManagedUser | null) => {
+    if (!user) {
+      setUserForm(emptyUserForm);
+      return;
+    }
+
+    setUserForm({
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      active: user.active,
+      password: "",
+      confirmPassword: "",
+    });
+  }, []);
 
   const loadUsers = useCallback(async () => {
     setUsersLoading(true);
@@ -73,15 +109,6 @@ export function Settings() {
     try {
       const payload = (await api.getUsers()) as ManagedUser[];
       setUsers(payload);
-
-      const firstAdmin = payload.find((user) => user.role === "admin" && user.active);
-      if (firstAdmin) {
-        setProfile({
-          name: firstAdmin.name,
-          email: firstAdmin.email,
-          role: "Administrator",
-        });
-      }
     } catch (error) {
       setUsers([]);
       setUsersError(error instanceof Error ? error.message : "Unable to load users");
@@ -94,21 +121,59 @@ export function Settings() {
     void loadUsers();
   }, [loadUsers]);
 
+  useEffect(() => {
+    syncEditorFromUser(selectedUser);
+  }, [selectedUser, syncEditorFromUser]);
+
+  useEffect(() => {
+    if (selectedUserId === "" && users.length > 0) {
+      setSelectedUserId(users[0].id);
+    }
+  }, [users, selectedUserId]);
+
+  useEffect(() => {
+    const updateActiveSection = () => {
+      const anchor = 180;
+      const visible = sectionOrder.filter(({ ref }) => {
+        const element = ref.current;
+        if (!element) return false;
+        return element.getBoundingClientRect().top <= anchor;
+      });
+
+      const nextSection = visible.length > 0 ? visible[visible.length - 1].key : sectionOrder[0].key;
+      setActiveSection((current) => (current === nextSection ? current : nextSection));
+    };
+
+    window.addEventListener("scroll", updateActiveSection, { passive: true });
+    window.addEventListener("resize", updateActiveSection);
+    updateActiveSection();
+
+    return () => {
+      window.removeEventListener("scroll", updateActiveSection);
+      window.removeEventListener("resize", updateActiveSection);
+    };
+  }, [sectionOrder]);
+
   const activeUsersCount = useMemo(() => users.filter((user) => user.active).length, [users]);
   const adminCount = useMemo(() => users.filter((user) => user.active && user.role === "admin").length, [users]);
 
-  const sectionItems: Array<{ key: SectionKey; icon: typeof User; label: string }> = [
-    { key: "profile", icon: User, label: "Profile Settings" },
-    { key: "users", icon: Users, label: "User Management" },
-    { key: "notifications", icon: Bell, label: "Notifications" },
-    { key: "security", icon: Shield, label: "Security" },
-    { key: "backup", icon: Database, label: "Database Backup" },
-    { key: "activity", icon: Activity, label: "Activity Logs" },
-  ];
-
-  const scrollToSection = (key: SectionKey) => {
+  const navigateToSection = (key: SectionKey) => {
     setActiveSection(key);
-    sectionRefs[key].current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const target = sectionOrder.find((item) => item.key === key)?.ref.current;
+    target?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const selectUserForEditing = (user: ManagedUser) => {
+    setSelectedUserId(user.id);
+    setActiveSection("profile");
+    profileRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const resetToNewUser = () => {
+    setSelectedUserId("new");
+    syncEditorFromUser(null);
+    setActiveSection("profile");
+    profileRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   const handleSaveProfile = (e: FormEvent<HTMLFormElement>) => {
@@ -126,24 +191,44 @@ export function Settings() {
     setSecurity({ currentPassword: "", newPassword: "", confirmPassword: "" });
   };
 
-  const handleCreateUser = async (e: FormEvent<HTMLFormElement>) => {
+  const handleSaveUser = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setSavingUser(true);
     setUsersMessage(null);
 
     try {
-      await api.createUser({
+      const password = userForm.password.trim();
+      const confirmPassword = userForm.confirmPassword.trim();
+      const editingExisting = Boolean(selectedUser);
+
+      if (password || confirmPassword) {
+        if (password !== confirmPassword) {
+          throw new Error("Passwords do not match.");
+        }
+      } else if (!editingExisting) {
+        throw new Error("Password is required for new users.");
+      }
+
+      const payload = {
         name: userForm.name,
         email: userForm.email,
         role: userForm.role,
-      });
-      setUserForm(emptyUserForm);
+        active: userForm.active,
+        ...(password ? { password } : {}),
+      };
+
+      if (editingExisting) {
+        await api.updateUser(selectedUser!.id, payload);
+        setUsersMessage("User updated successfully.");
+      } else {
+        const created = (await api.createUser(payload)) as ManagedUser;
+        setSelectedUserId(created.id);
+        setUsersMessage("User added successfully.");
+      }
+
       await loadUsers();
-      setUsersMessage("User added successfully.");
-      setActiveSection("users");
-      sectionRefs.users.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     } catch (error) {
-      setUsersMessage(error instanceof Error ? error.message : "Unable to create user.");
+      setUsersMessage(error instanceof Error ? error.message : "Unable to save user.");
     } finally {
       setSavingUser(false);
     }
@@ -154,9 +239,7 @@ export function Settings() {
     setUsersMessage(null);
 
     try {
-      await api.updateUser(user.id, {
-        role: user.role === "admin" ? "user" : "admin",
-      });
+      await api.updateUser(user.id, { role: user.role === "admin" ? "user" : "admin" });
       await loadUsers();
       setUsersMessage(`${user.name} updated.`);
     } catch (error) {
@@ -171,9 +254,7 @@ export function Settings() {
     setUsersMessage(null);
 
     try {
-      await api.updateUser(user.id, {
-        active: !user.active,
-      });
+      await api.updateUser(user.id, { active: !user.active });
       await loadUsers();
       setUsersMessage(`${user.name} updated.`);
     } catch (error) {
@@ -192,14 +273,14 @@ export function Settings() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-2 lg:sticky lg:top-24 lg:self-start">
-          {sectionItems.map((item) => {
-            const Icon = item.icon;
+          {sectionOrder.map((item) => {
+            const Icon = item.key === "profile" ? User : item.key === "users" ? Users : item.key === "notifications" ? Bell : item.key === "security" ? Shield : Activity;
             const isActive = activeSection === item.key;
             return (
               <button
                 key={item.key}
                 type="button"
-                onClick={() => scrollToSection(item.key)}
+                onClick={() => navigateToSection(item.key)}
                 className={`flex w-full items-center gap-3 rounded-xl p-4 text-left transition-all duration-200 ${
                   isActive
                     ? "border border-green-500/30 bg-gradient-to-r from-green-600/20 to-emerald-600/20 text-green-400"
@@ -214,30 +295,67 @@ export function Settings() {
         </div>
 
         <div className="space-y-6 lg:col-span-2">
-          <div ref={sectionRefs.users} id="settings-users" className="rounded-2xl border border-green-900/20 bg-gray-900/50 p-6 backdrop-blur-xl">
+          <div ref={profileRef} id="profile" className="scroll-mt-24 rounded-2xl border border-green-900/20 bg-gray-900/50 p-6 backdrop-blur-xl">
             <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex items-center gap-3">
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-green-500 to-emerald-600">
-                  <Users className="h-6 w-6 text-white" />
+                  <User className="h-6 w-6 text-white" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-white">User Management</h3>
-                  <p className="text-sm text-gray-400">Add users and control admin access</p>
+                  <h3 className="text-lg font-bold text-white">{selectedUser ? "Edit User Profile" : "Create New User"}</h3>
+                  <p className="text-sm text-gray-400">Select a user, then update their details and password</p>
                 </div>
               </div>
-              <div className="flex gap-3 text-sm text-gray-400">
-                <span className="rounded-full border border-gray-700 bg-gray-800/50 px-3 py-1">Active: {activeUsersCount}</span>
-                <span className="rounded-full border border-gray-700 bg-gray-800/50 px-3 py-1">Admins: {adminCount}</span>
+              <button
+                type="button"
+                onClick={resetToNewUser}
+                className="flex items-center gap-2 rounded-xl border border-gray-700 bg-gray-800/50 px-4 py-2 text-sm font-medium text-white transition-all hover:bg-gray-800"
+              >
+                <UserPlus className="h-4 w-4" />
+                New User
+              </button>
+            </div>
+
+            <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-300">Select User</label>
+                <select
+                  value={selectedUserId}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === "new") {
+                      resetToNewUser();
+                      return;
+                    }
+                    setSelectedUserId(value);
+                  }}
+                  className="w-full rounded-xl border border-gray-700 bg-gray-800/50 px-4 py-3 text-white transition-all focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/50"
+                >
+                  <option value="">Select a user...</option>
+                  <option value="new">Create New User</option>
+                  {users.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.name} {user.active ? "" : "(Inactive)"}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="rounded-xl border border-gray-700 bg-gray-800/30 p-4 text-sm text-gray-400">
+                <div className="flex items-center justify-between">
+                  <span>Active users</span>
+                  <span className="font-medium text-white">{activeUsersCount}</span>
+                </div>
+                <div className="mt-2 flex items-center justify-between">
+                  <span>Admin users</span>
+                  <span className="font-medium text-white">{adminCount}</span>
+                </div>
+                <p className="mt-3 text-xs text-gray-500">Leave password blank when editing if you do not want to change it.</p>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-              <form onSubmit={handleCreateUser} className="space-y-4 rounded-2xl border border-gray-700 bg-gray-800/30 p-5">
-                <div className="flex items-center gap-2">
-                  <UserPlus className="h-5 w-5 text-green-400" />
-                  <h4 className="text-base font-bold text-white">Add New User</h4>
-                </div>
-
+            <form onSubmit={handleSaveUser} className="space-y-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
                   <label className="mb-2 block text-sm font-medium text-gray-300">Full Name</label>
                   <input
@@ -274,168 +392,176 @@ export function Settings() {
                   </select>
                 </div>
 
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-300">Status</label>
+                  <select
+                    value={userForm.active ? "active" : "inactive"}
+                    onChange={(e) => setUserForm({ ...userForm, active: e.target.value === "active" })}
+                    className="w-full rounded-xl border border-gray-700 bg-gray-800/50 px-4 py-3 text-white transition-all focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/50"
+                  >
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-300">
+                    Password {selectedUser ? "(leave blank to keep current)" : "(required)"}
+                  </label>
+                  <input
+                    type="password"
+                    value={userForm.password}
+                    onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
+                    className="w-full rounded-xl border border-gray-700 bg-gray-800/50 px-4 py-3 text-white transition-all placeholder:text-gray-500 focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/50"
+                    placeholder={selectedUser ? "Optional password change" : "Enter password"}
+                    required={!selectedUser}
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-300">Confirm Password</label>
+                  <input
+                    type="password"
+                    value={userForm.confirmPassword}
+                    onChange={(e) => setUserForm({ ...userForm, confirmPassword: e.target.value })}
+                    className="w-full rounded-xl border border-gray-700 bg-gray-800/50 px-4 py-3 text-white transition-all placeholder:text-gray-500 focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/50"
+                    placeholder="Confirm password"
+                    required={!selectedUser}
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-3 pt-2">
                 <button
                   type="submit"
                   disabled={savingUser}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 py-3 font-medium text-white transition-all duration-200 hover:from-green-500 hover:to-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 px-5 py-3 font-medium text-white transition-all duration-200 hover:from-green-500 hover:to-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {savingUser ? <RefreshCw className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
-                  {savingUser ? "Adding User..." : "Add User"}
+                  {savingUser ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  {savingUser ? "Saving..." : selectedUser ? "Update User" : "Add User"}
                 </button>
 
-                {usersMessage && <p className="text-sm text-gray-300">{usersMessage}</p>}
-                {usersError && <p className="text-sm text-red-400">{usersError}</p>}
-              </form>
-
-              <div className="rounded-2xl border border-gray-700 bg-gray-800/30 p-5">
-                <div className="mb-4 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <ShieldCheck className="h-5 w-5 text-green-400" />
-                    <h4 className="text-base font-bold text-white">Manage Existing Users</h4>
-                  </div>
-                  {usersLoading && <span className="text-xs text-gray-400">Loading...</span>}
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-gray-700">
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">User</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Role</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Status</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {users.length > 0 ? (
-                        users.map((user) => {
-                          const isBusy = busyUserId === user.id;
-                          return (
-                            <tr key={user.id} className="border-b border-gray-700/60">
-                              <td className="px-3 py-3">
-                                <div>
-                                  <div className="font-medium text-white">{user.name}</div>
-                                  <div className="text-xs text-gray-400">{user.email}</div>
-                                </div>
-                              </td>
-                              <td className="px-3 py-3">
-                                <span
-                                  className={`rounded-full px-2 py-1 text-xs ${
-                                    user.role === "admin"
-                                      ? "bg-purple-500/20 text-purple-300"
-                                      : "bg-gray-700/60 text-gray-300"
-                                  }`}
-                                >
-                                  {user.role === "admin" ? "Admin" : "User"}
-                                </span>
-                              </td>
-                              <td className="px-3 py-3">
-                                <span
-                                  className={`rounded-full px-2 py-1 text-xs ${
-                                    user.active ? "bg-green-500/20 text-green-300" : "bg-red-500/20 text-red-300"
-                                  }`}
-                                >
-                                  {user.active ? "Active" : "Inactive"}
-                                </span>
-                              </td>
-                              <td className="px-3 py-3">
-                                <div className="flex flex-wrap gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => toggleRole(user)}
-                                    disabled={isBusy}
-                                    className="rounded-lg border border-gray-700 bg-gray-900/50 px-3 py-2 text-xs font-medium text-white transition-all hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
-                                  >
-                                    {user.role === "admin" ? "Demote" : "Promote to Admin"}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => toggleActive(user)}
-                                    disabled={isBusy}
-                                    className="rounded-lg border border-gray-700 bg-gray-900/50 px-3 py-2 text-xs font-medium text-white transition-all hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
-                                  >
-                                    {user.active ? "Deactivate" : "Reactivate"}
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })
-                      ) : (
-                        <tr>
-                          <td className="px-3 py-4 text-sm text-gray-400" colSpan={4}>
-                            {usersLoading ? "Loading users..." : "No users found."}
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-                {!usersLoading && users.length > 0 && (
-                  <div className="mt-4 rounded-xl border border-gray-700 bg-gray-900/40 p-3 text-xs text-gray-400">
-                    Admin access can be promoted or removed without leaving this page.
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div ref={sectionRefs.profile} id="settings-profile" className="rounded-2xl border border-green-900/20 bg-gray-900/50 p-6 backdrop-blur-xl">
-            <div className="mb-6 flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-green-500 to-emerald-600">
-                <User className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-white">Profile Settings</h3>
-                <p className="text-sm text-gray-400">Update your personal information</p>
-              </div>
-            </div>
-
-            <form onSubmit={handleSaveProfile} className="space-y-4">
-              <div>
-                <label className="mb-2 block text-sm font-medium text-gray-300">Full Name</label>
-                <input
-                  type="text"
-                  value={profile.name}
-                  onChange={(e) => setProfile({ ...profile, name: e.target.value })}
-                  className="w-full rounded-xl border border-gray-700 bg-gray-800/50 px-4 py-3 text-white transition-all placeholder:text-gray-500 focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/50"
-                  required
-                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (selectedUser) {
+                      syncEditorFromUser(selectedUser);
+                    } else {
+                      resetToNewUser();
+                    }
+                  }}
+                  className="rounded-xl border border-gray-700 bg-gray-800/50 px-5 py-3 font-medium text-white transition-all hover:bg-gray-800"
+                >
+                  Reset
+                </button>
               </div>
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-gray-300">Email Address</label>
-                <input
-                  type="email"
-                  value={profile.email}
-                  onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-                  className="w-full rounded-xl border border-gray-700 bg-gray-800/50 px-4 py-3 text-white transition-all placeholder:text-gray-500 focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/50"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm font-medium text-gray-300">Role</label>
-                <input
-                  type="text"
-                  value={profile.role}
-                  className="w-full cursor-not-allowed rounded-xl border border-gray-700 bg-gray-800/50 px-4 py-3 text-gray-500"
-                  disabled
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 py-3 font-medium text-white transition-all duration-200 hover:from-green-500 hover:to-emerald-500"
-              >
-                <Save className="h-4 w-4" />
-                Save Changes
-              </button>
+              {usersMessage && <p className="text-sm text-gray-300">{usersMessage}</p>}
+              {usersError && <p className="text-sm text-red-400">{usersError}</p>}
             </form>
           </div>
 
-          <div ref={sectionRefs.notifications} id="settings-notifications" className="rounded-2xl border border-green-900/20 bg-gray-900/50 p-6 backdrop-blur-xl">
+          <div ref={usersRef} id="users" className="scroll-mt-24 rounded-2xl border border-green-900/20 bg-gray-900/50 p-6 backdrop-blur-xl">
+            <div className="mb-6 flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-green-500 to-emerald-600">
+                <Users className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">User Management</h3>
+                <p className="text-sm text-gray-400">Review users and open them in the editor above</p>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-700">
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">User</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Role</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Status</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.length > 0 ? (
+                    users.map((user) => {
+                      const isBusy = busyUserId === user.id;
+                      return (
+                        <tr key={user.id} className="border-b border-gray-700/60">
+                          <td className="px-3 py-3">
+                            <div>
+                              <div className="font-medium text-white">{user.name}</div>
+                              <div className="text-xs text-gray-400">{user.email}</div>
+                            </div>
+                          </td>
+                          <td className="px-3 py-3">
+                            <span
+                              className={`rounded-full px-2 py-1 text-xs ${
+                                user.role === "admin" ? "bg-purple-500/20 text-purple-300" : "bg-gray-700/60 text-gray-300"
+                              }`}
+                            >
+                              {user.role === "admin" ? "Admin" : "User"}
+                            </span>
+                          </td>
+                          <td className="px-3 py-3">
+                            <span
+                              className={`rounded-full px-2 py-1 text-xs ${
+                                user.active ? "bg-green-500/20 text-green-300" : "bg-red-500/20 text-red-300"
+                              }`}
+                            >
+                              {user.active ? "Active" : "Inactive"}
+                            </span>
+                          </td>
+                          <td className="px-3 py-3">
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => selectUserForEditing(user)}
+                                className="rounded-lg border border-gray-700 bg-gray-900/50 px-3 py-2 text-xs font-medium text-white transition-all hover:bg-gray-800"
+                              >
+                                <Edit className="mr-1 inline h-3.5 w-3.5" />
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => toggleRole(user)}
+                                disabled={isBusy}
+                                className="rounded-lg border border-gray-700 bg-gray-900/50 px-3 py-2 text-xs font-medium text-white transition-all hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                {user.role === "admin" ? "Demote" : "Promote"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => toggleActive(user)}
+                                disabled={isBusy}
+                                className="rounded-lg border border-gray-700 bg-gray-900/50 px-3 py-2 text-xs font-medium text-white transition-all hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                {user.active ? "Deactivate" : "Reactivate"}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td className="px-3 py-4 text-sm text-gray-400" colSpan={4}>
+                        {usersLoading ? "Loading users..." : "No users found."}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {!usersLoading && users.length > 0 && (
+              <div className="mt-4 rounded-xl border border-gray-700 bg-gray-900/40 p-3 text-xs text-gray-400">
+                Use Edit to load a user into the profile section, then update the details or password there.
+              </div>
+            )}
+          </div>
+
+          <div ref={notificationsRef} id="notifications" className="scroll-mt-24 rounded-2xl border border-green-900/20 bg-gray-900/50 p-6 backdrop-blur-xl">
             <div className="mb-6 flex items-center gap-3">
               <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-600">
                 <Bell className="h-6 w-6 text-white" />
@@ -472,7 +598,7 @@ export function Settings() {
             </div>
           </div>
 
-          <div ref={sectionRefs.security} id="settings-security" className="rounded-2xl border border-green-900/20 bg-gray-900/50 p-6 backdrop-blur-xl">
+          <div ref={securityRef} id="security" className="scroll-mt-24 rounded-2xl border border-green-900/20 bg-gray-900/50 p-6 backdrop-blur-xl">
             <div className="mb-6 flex items-center gap-3">
               <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-purple-600">
                 <Shield className="h-6 w-6 text-white" />
@@ -530,36 +656,7 @@ export function Settings() {
             </form>
           </div>
 
-          <div ref={sectionRefs.backup} id="settings-backup" className="rounded-2xl border border-green-900/20 bg-gray-900/50 p-6 backdrop-blur-xl">
-            <div className="mb-6 flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-orange-600">
-                <Database className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-white">Database Backup</h3>
-                <p className="text-sm text-gray-400">Manage database backups</p>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <div className="rounded-xl border border-gray-700 bg-gray-800/30 p-4">
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-sm font-medium text-white">Last Backup</span>
-                  <span className="text-xs text-gray-400">2026-05-17 03:00 AM</span>
-                </div>
-                <div className="text-xs text-gray-400">Automatic daily backups enabled</div>
-              </div>
-
-              <button className="w-full rounded-xl border border-gray-700 bg-gray-800/50 py-3 font-medium text-white transition-all duration-200 hover:bg-gray-800">
-                Create Manual Backup
-              </button>
-              <button className="w-full rounded-xl border border-gray-700 bg-gray-800/50 py-3 font-medium text-white transition-all duration-200 hover:bg-gray-800">
-                View Backup History
-              </button>
-            </div>
-          </div>
-
-          <div ref={sectionRefs.activity} id="settings-activity" className="rounded-2xl border border-green-900/20 bg-gray-900/50 p-6 backdrop-blur-xl">
+          <div ref={activityRef} id="activity" className="scroll-mt-24 rounded-2xl border border-green-900/20 bg-gray-900/50 p-6 backdrop-blur-xl">
             <div className="mb-6 flex items-center gap-3">
               <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-teal-500 to-teal-600">
                 <Activity className="h-6 w-6 text-white" />
