@@ -12,6 +12,7 @@ import {
   Users,
 } from "lucide-react";
 import { api } from "../lib/api";
+import { mockUsers } from "../data/mockData";
 
 type ManagedUser = {
   id: string;
@@ -65,6 +66,7 @@ export function Settings() {
   const [usersLoading, setUsersLoading] = useState(true);
   const [usersError, setUsersError] = useState<string | null>(null);
   const [usersMessage, setUsersMessage] = useState<string | null>(null);
+  const [demoMode, setDemoMode] = useState(false);
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
   const [savingUser, setSavingUser] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<string>("");
@@ -102,6 +104,13 @@ export function Settings() {
     });
   }, []);
 
+  const makeUserId = useCallback(() => {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+    return `demo-${Date.now()}`;
+  }, []);
+
   const loadUsers = useCallback(async () => {
     setUsersLoading(true);
     setUsersError(null);
@@ -109,9 +118,14 @@ export function Settings() {
     try {
       const payload = (await api.getUsers()) as ManagedUser[];
       setUsers(payload);
+      setDemoMode(false);
+      setUsersMessage(null);
     } catch (error) {
-      setUsers([]);
-      setUsersError(error instanceof Error ? error.message : "Unable to load users");
+      setDemoMode(true);
+      setUsers(mockUsers as ManagedUser[]);
+      setUsersError(null);
+      setUsersMessage("Demo users are loaded locally because the API is unavailable.");
+      console.warn("Falling back to local user demo data because the API is unavailable.", error);
     } finally {
       setUsersLoading(false);
     }
@@ -217,6 +231,41 @@ export function Settings() {
         ...(password ? { password } : {}),
       };
 
+      if (demoMode) {
+        if (editingExisting) {
+          const updatedAt = new Date().toISOString();
+          setUsers((current) =>
+            current.map((user) =>
+              user.id === selectedUser!.id
+                ? {
+                    ...user,
+                    name: payload.name,
+                    email: payload.email,
+                    role: payload.role,
+                    active: payload.active,
+                    updatedAt,
+                  }
+                : user,
+            ),
+          );
+          setUsersMessage("User updated successfully in demo mode.");
+        } else {
+          const created: ManagedUser = {
+            id: makeUserId(),
+            name: payload.name,
+            email: payload.email,
+            role: payload.role,
+            active: payload.active,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+          setUsers((current) => [created, ...current]);
+          setSelectedUserId(created.id);
+          setUsersMessage("User added successfully in demo mode.");
+        }
+        return;
+      }
+
       if (editingExisting) {
         await api.updateUser(selectedUser!.id, payload);
         setUsersMessage("User updated successfully.");
@@ -239,6 +288,22 @@ export function Settings() {
     setUsersMessage(null);
 
     try {
+      if (demoMode) {
+        setUsers((current) =>
+          current.map((item) =>
+            item.id === user.id
+              ? {
+                  ...item,
+                  role: item.role === "admin" ? "user" : "admin",
+                  updatedAt: new Date().toISOString(),
+                }
+              : item,
+          ),
+        );
+        setUsersMessage(`${user.name} updated in demo mode.`);
+        return;
+      }
+
       await api.updateUser(user.id, { role: user.role === "admin" ? "user" : "admin" });
       await loadUsers();
       setUsersMessage(`${user.name} updated.`);
@@ -254,6 +319,22 @@ export function Settings() {
     setUsersMessage(null);
 
     try {
+      if (demoMode) {
+        setUsers((current) =>
+          current.map((item) =>
+            item.id === user.id
+              ? {
+                  ...item,
+                  active: !item.active,
+                  updatedAt: new Date().toISOString(),
+                }
+              : item,
+          ),
+        );
+        setUsersMessage(`${user.name} updated in demo mode.`);
+        return;
+      }
+
       await api.updateUser(user.id, { active: !user.active });
       await loadUsers();
       setUsersMessage(`${user.name} updated.`);

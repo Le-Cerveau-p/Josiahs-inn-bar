@@ -5,13 +5,22 @@ import {
   buildMonthlyOutingData,
   buildWeeklyOutingData,
   getDrinkStatus,
+  isWithinRange,
   type OutingEntry,
   type PriceChangeEntry,
   type PriceChangeSummary,
   type StockEntry,
 } from "../lib/analytics";
 import { formatNaira } from "../lib/currency";
-import { categoryData, mockActivities, mockDrinks, salesChartData, weeklyOutingData, type Drink, type OutingType } from "../data/mockData";
+import {
+  mockDrinks,
+  mockOutingEntries,
+  mockPriceChanges,
+  mockStockEntries,
+  salesChartData,
+  type Drink,
+  type OutingType,
+} from "../data/mockData";
 
 type StockItemInput = {
   drinkId: string;
@@ -131,65 +140,298 @@ function normalizeDrink(drink: Drink): Drink {
   };
 }
 
-async function loadFallbackAnalytics() {
-  const fallbackByDrink = mockDrinks.slice(0, 6).map((drink, index) => {
-    const quantity = 200 - index * 12;
-    const revenue = drink.sellingPrice * quantity;
-    const cost = drink.costPrice * quantity;
-    const netProfitLoss = revenue - cost;
+function buildDemoRecentActivities() {
+  const stockActivities = mockStockEntries.flatMap((entry) =>
+    entry.items.map((item) => ({
+      id: `${entry.id}:${item.id}`,
+      date: `${entry.date} 09:00`,
+      type: "Stocking" as const,
+      drinkName: item.drinkName,
+      quantity: item.quantity,
+      user: "Inventory Clerk",
+      status: "Completed" as const,
+    })),
+  );
 
-    return {
-      drinkId: drink.id,
-      drinkName: drink.name,
-      quantity,
-      salesQuantity: quantity,
-      revenue,
-      cost,
-      profit: Math.max(netProfitLoss, 0),
-      loss: Math.max(-netProfitLoss, 0),
-      netProfitLoss,
-      outingType: "All" as const,
-    };
-  });
+  const outingActivities = mockOutingEntries.flatMap((entry) =>
+    entry.items.map((item) => ({
+      id: `${entry.id}:${item.id}`,
+      date: `${entry.date} 12:00`,
+      type: entry.type,
+      drinkName: item.drinkName,
+      quantity: item.quantity,
+      user: entry.type === "Sales" ? "Floor Supervisor" : "Admin User",
+      status: "Completed" as const,
+    })),
+  );
 
-  const totalRevenue = salesChartData[salesChartData.length - 1]?.revenue ?? 0;
-  const totalCost = Number((totalRevenue * 0.72).toFixed(2));
-  const netProfitLoss = totalRevenue - totalCost;
+  return [...stockActivities, ...outingActivities]
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 10);
+}
+
+function buildDemoDashboard() {
+  const monthPrefix = "2026-05";
+  const salesEntries = mockOutingEntries.filter((entry) => entry.type === "Sales");
+  const latestSalesEntry = [...salesEntries].sort((a, b) => b.date.localeCompare(a.date))[0];
+  const monthSales = mockOutingEntries
+    .filter((entry) => entry.date.startsWith(monthPrefix) && entry.type === "Sales")
+    .flatMap((entry) => entry.items)
+    .reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+  const monthRevenue = monthSales;
+  const totalInventory = mockDrinks.reduce((sum, drink) => sum + drink.quantity, 0);
+  const monthlyChart = buildMonthlyOutingData(mockOutingEntries as unknown as OutingEntry[]).map((item) => ({
+    month: item.month,
+    sales: item.sales,
+    revenue: item.revenue,
+  }));
 
   return {
-    summary: {
-      totalRevenue,
-      totalCost,
-      profit: Math.max(netProfitLoss, 0),
-      loss: Math.max(-netProfitLoss, 0),
-      netProfitLoss,
-      salesQuantity: 21300,
-      bdQuantity: 1560,
-      hotelQuantity: 1890,
-      totalItems: mockDrinks.length,
-      uniqueDrinks: mockDrinks.length,
+    stats: {
+      totalInventory,
+      totalSalesToday: formatNaira(
+        latestSalesEntry ? latestSalesEntry.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0) : 0,
+      ),
+      monthlyRevenue: formatNaira(monthRevenue),
+      lowStockDrinks: mockDrinks.filter((drink) => drink.status === "Low Stock").length,
+      hotelRefreshments: mockOutingEntries
+        .filter((entry) => entry.date.startsWith(monthPrefix) && entry.type === "Hotel Refreshment")
+        .flatMap((entry) => entry.items)
+        .reduce((sum, item) => sum + item.quantity, 0),
+      bdCount: mockOutingEntries
+        .filter((entry) => entry.date.startsWith(monthPrefix) && entry.type === "B&D")
+        .flatMap((entry) => entry.items)
+        .reduce((sum, item) => sum + item.quantity, 0),
     },
-    byDrink: fallbackByDrink,
-    monthlyTrend: salesChartData.map((item) => ({
-      month: item.month,
-      sales: item.sales,
+    recentActivities: buildDemoRecentActivities(),
+    lowStockDrinks: mockDrinks.filter((drink) => drink.status === "Low Stock"),
+    categoryData: buildCategoryData(mockDrinks),
+    salesChartData: monthlyChart.length > 0 ? monthlyChart : salesChartData,
+    weeklyOutingData: buildWeeklyOutingData(mockOutingEntries as unknown as OutingEntry[]),
+  };
+}
+
+function buildDemoAnalytics(filters: { from?: string; to?: string; drinkId?: string; type?: string }): AnalyticsPayload {
+  const from = filters.from ?? "0000-01-01";
+  const to = filters.to ?? "9999-12-31";
+  const drinkId = filters.drinkId && filters.drinkId !== "all" ? filters.drinkId : undefined;
+  const outingType = filters.type && filters.type !== "all" ? filters.type : undefined;
+
+  const filteredOutings = mockOutingEntries.filter((entry) => {
+    if (!isWithinRange(entry.date, from, to)) return false;
+    if (outingType && entry.type !== outingType) return false;
+    if (drinkId) {
+      return entry.items.some((item) => item.drinkId === drinkId);
+    }
+    return true;
+  });
+
+  const filteredPriceChanges = mockPriceChanges.filter((change) => {
+    if (!isWithinRange(change.changedAt, from, to)) return false;
+    if (drinkId) {
+      return change.drinkId === drinkId;
+    }
+    return true;
+  });
+
+  const byDrink = new Map<string, AnalyticsPayload["byDrink"][number]>();
+  const monthly = new Map<
+    string,
+    {
+      month: string;
+      sales: number;
+      bd: number;
+      hotel: number;
+      revenue: number;
+      cost: number;
+      profit: number;
+      loss: number;
+      netProfitLoss: number;
+    }
+  >();
+  const weekly = new Map<
+    number,
+    {
+      day: string;
+      sales: number;
+      bd: number;
+      hotel: number;
+      revenue: number;
+      cost: number;
+      profit: number;
+      loss: number;
+      netProfitLoss: number;
+    }
+  >();
+
+  const summary = {
+    totalRevenue: 0,
+    totalCost: 0,
+    profit: 0,
+    loss: 0,
+    netProfitLoss: 0,
+    salesQuantity: 0,
+    bdQuantity: 0,
+    hotelQuantity: 0,
+    totalItems: 0,
+    uniqueDrinks: 0,
+  };
+  const drinkIds = new Set<string>();
+
+  filteredOutings.forEach((entry) => {
+    const entryItems = entry.items.filter((item) => (drinkId ? item.drinkId === drinkId : true));
+    if (entryItems.length === 0) return;
+
+    const monthKey = entry.date.slice(0, 7);
+    const monthRecord = monthly.get(monthKey) ?? {
+      month: monthKey,
+      sales: 0,
       bd: 0,
       hotel: 0,
-      revenue: item.revenue,
-      cost: Number((item.revenue * 0.72).toFixed(2)),
-      profit: Number((item.revenue * 0.28).toFixed(2)),
+      revenue: 0,
+      cost: 0,
+      profit: 0,
       loss: 0,
-      netProfitLoss: Number((item.revenue * 0.28).toFixed(2)),
-    })),
-    categoryData,
-    weeklyOutingData,
-    priceChanges: [],
-    priceChangeSummary: {
+      netProfitLoss: 0,
+    };
+    const dayIndex = new Date(`${entry.date}T12:00:00Z`).getUTCDay();
+    const weeklyRecord = weekly.get(dayIndex) ?? {
+      day: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][dayIndex],
+      sales: 0,
+      bd: 0,
+      hotel: 0,
+      revenue: 0,
+      cost: 0,
+      profit: 0,
+      loss: 0,
+      netProfitLoss: 0,
+    };
+    const entryQuantity = entryItems.reduce((sum, item) => sum + item.quantity, 0);
+
+    summary.totalItems += entryItems.length;
+
+    if (entry.type === "Sales") {
+      summary.salesQuantity += entryQuantity;
+      monthRecord.sales += entryQuantity;
+      weeklyRecord.sales += entryQuantity;
+    } else if (entry.type === "B&D") {
+      summary.bdQuantity += entryQuantity;
+      monthRecord.bd += entryQuantity;
+      weeklyRecord.bd += entryQuantity;
+    } else {
+      summary.hotelQuantity += entryQuantity;
+      monthRecord.hotel += entryQuantity;
+      weeklyRecord.hotel += entryQuantity;
+    }
+
+    entryItems.forEach((item) => {
+      const itemRevenue = entry.type === "Sales" ? item.quantity * item.unitPrice : 0;
+      const itemCost = item.quantity * item.costPrice;
+      const margin = itemRevenue - itemCost;
+
+      summary.totalRevenue += itemRevenue;
+      summary.totalCost += itemCost;
+      summary.netProfitLoss += margin;
+
+      if (margin >= 0) {
+        summary.profit += margin;
+      } else {
+        summary.loss += Math.abs(margin);
+      }
+
+      monthRecord.revenue += itemRevenue;
+      monthRecord.cost += itemCost;
+      monthRecord.netProfitLoss += margin;
+      if (margin >= 0) {
+        monthRecord.profit += margin;
+      } else {
+        monthRecord.loss += Math.abs(margin);
+      }
+
+      weeklyRecord.revenue += itemRevenue;
+      weeklyRecord.cost += itemCost;
+      weeklyRecord.netProfitLoss += margin;
+      if (margin >= 0) {
+        weeklyRecord.profit += margin;
+      } else {
+        weeklyRecord.loss += Math.abs(margin);
+      }
+
+      const current = byDrink.get(item.drinkId) ?? {
+        drinkId: item.drinkId,
+        drinkName: item.drinkName,
+        quantity: 0,
+        salesQuantity: 0,
+        revenue: 0,
+        cost: 0,
+        profit: 0,
+        loss: 0,
+        netProfitLoss: 0,
+        outingType: outingType ?? "All",
+      };
+
+      current.quantity += item.quantity;
+      if (entry.type === "Sales") {
+        current.salesQuantity += item.quantity;
+      }
+      current.revenue += itemRevenue;
+      current.cost += itemCost;
+      current.netProfitLoss += margin;
+      if (margin >= 0) {
+        current.profit += margin;
+      } else {
+        current.loss += Math.abs(margin);
+      }
+
+      byDrink.set(item.drinkId, current);
+      drinkIds.add(item.drinkId);
+    });
+
+    monthly.set(monthKey, monthRecord);
+    weekly.set(dayIndex, weeklyRecord);
+  });
+
+  const priceChangeSummary = filteredPriceChanges.reduce(
+    (acc, change) => {
+      acc.updates += 1;
+      acc.affectedDrinks.add(change.drinkId);
+      if (change.inventoryImpact >= 0) {
+        acc.positiveImpact += change.inventoryImpact;
+      } else {
+        acc.negativeImpact += Math.abs(change.inventoryImpact);
+      }
+      acc.netImpact += change.inventoryImpact;
+      return acc;
+    },
+    {
       updates: 0,
       positiveImpact: 0,
       negativeImpact: 0,
       netImpact: 0,
-      affectedDrinks: 0,
+      affectedDrinks: new Set<string>(),
+    },
+  );
+
+  summary.uniqueDrinks = drinkIds.size;
+
+  return {
+    summary,
+    byDrink: Array.from(byDrink.values()).sort((a, b) => b.netProfitLoss - a.netProfitLoss),
+    monthlyTrend: Array.from(monthly.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([, value]) => value),
+    categoryData: buildCategoryData(mockDrinks),
+    weeklyOutingData: Array.from(weekly.values()).sort((a, b) => {
+      const order = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      return order.indexOf(a.day) - order.indexOf(b.day);
+    }),
+    priceChanges: filteredPriceChanges,
+    priceChangeSummary: {
+      updates: priceChangeSummary.updates,
+      positiveImpact: Number(priceChangeSummary.positiveImpact.toFixed(2)),
+      negativeImpact: Number(priceChangeSummary.negativeImpact.toFixed(2)),
+      netImpact: Number(priceChangeSummary.netImpact.toFixed(2)),
+      affectedDrinks: priceChangeSummary.affectedDrinks.size,
     },
   };
 }
@@ -220,23 +462,9 @@ export function BarDataProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       console.warn("Falling back to local seed data because the API is unavailable.", err);
       setDrinks(mockDrinks.map(normalizeDrink));
-      setStockEntries([]);
-      setOutingEntries([]);
-      setDashboard({
-        stats: {
-          totalInventory: mockDrinks.reduce((sum, drink) => sum + drink.quantity, 0),
-          totalSalesToday: formatNaira(2847),
-          monthlyRevenue: formatNaira(71800),
-          lowStockDrinks: mockDrinks.filter((drink) => drink.status === "Low Stock").length,
-          hotelRefreshments: 127,
-          bdCount: 43,
-        },
-        recentActivities: mockActivities,
-        lowStockDrinks: mockDrinks.filter((drink) => drink.status === "Low Stock"),
-        categoryData,
-        salesChartData,
-        weeklyOutingData,
-      });
+      setStockEntries(mockStockEntries as StockEntry[]);
+      setOutingEntries(mockOutingEntries as OutingEntry[]);
+      setDashboard(buildDemoDashboard());
       setError(err instanceof Error ? err.message : "Unable to connect to the API");
     } finally {
       setLoading(false);
@@ -273,7 +501,12 @@ export function BarDataProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   const getAnalytics = useCallback(async (filters: { from?: string; to?: string; drinkId?: string; type?: string }) => {
-    return (await api.getAnalytics(filters)) as AnalyticsPayload;
+    try {
+      return (await api.getAnalytics(filters)) as AnalyticsPayload;
+    } catch (error) {
+      console.warn("Using local analytics demo data because the API is unavailable.", error);
+      return buildDemoAnalytics(filters);
+    }
   }, []);
 
   const value = useMemo<BarDataContextValue>(

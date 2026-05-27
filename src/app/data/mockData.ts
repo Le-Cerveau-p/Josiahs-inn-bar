@@ -44,6 +44,64 @@ export interface OutingEntry {
   notes?: string;
 }
 
+export interface DemoUser {
+  id: string;
+  name: string;
+  email: string;
+  role: "admin" | "user";
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DemoStockEntry {
+  id: string;
+  date: string;
+  notes?: string;
+  items: Array<{
+    id: string;
+    drinkId: string;
+    drinkName: string;
+    quantity: number;
+    supplier: string;
+    notes?: string;
+    unitPrice: number;
+    costPrice: number;
+  }>;
+}
+
+export interface DemoOutingEntry {
+  id: string;
+  date: string;
+  type: OutingType;
+  notes?: string;
+  items: Array<{
+    id: string;
+    drinkId: string;
+    drinkName: string;
+    quantity: number;
+    unitPrice: number;
+    costPrice: number;
+  }>;
+}
+
+export interface DemoPriceChange {
+  id: string;
+  drinkId: string;
+  drinkName: string;
+  changeSummary: string;
+  changedAt: string;
+  oldCostPrice: number;
+  newCostPrice: number;
+  oldSellingPrice: number;
+  newSellingPrice: number;
+  quantityOnHand: number;
+  unitMarginBefore: number;
+  unitMarginAfter: number;
+  marginDelta: number;
+  inventoryImpact: number;
+}
+
 export const mockDrinks: Drink[] = [
   { id: '1', name: 'Heineken', category: 'Beer', quantity: 145, costPrice: 4.1, sellingPrice: 5.99, unitPrice: 5.99, lastUpdated: '2026-05-15', status: 'In Stock' },
   { id: '2', name: 'Corona Extra', category: 'Beer', quantity: 89, costPrice: 4.45, sellingPrice: 6.49, unitPrice: 6.49, lastUpdated: '2026-05-16', status: 'In Stock' },
@@ -97,4 +155,327 @@ export const weeklyOutingData = [
   { day: 'Fri', sales: 234, bd: 18, hotel: 29 },
   { day: 'Sat', sales: 289, bd: 22, hotel: 41 },
   { day: 'Sun', sales: 198, bd: 14, hotel: 35 },
+];
+
+export const mockUsers: DemoUser[] = [
+  {
+    id: "u1",
+    name: "Admin User",
+    email: "admin@josiahinnbar.com",
+    role: "admin",
+    active: true,
+    createdAt: "2026-05-01T09:00:00.000Z",
+    updatedAt: "2026-05-22T10:15:00.000Z",
+  },
+  {
+    id: "u2",
+    name: "Floor Supervisor",
+    email: "supervisor@josiahinnbar.com",
+    role: "user",
+    active: true,
+    createdAt: "2026-05-03T09:20:00.000Z",
+    updatedAt: "2026-05-20T08:35:00.000Z",
+  },
+  {
+    id: "u3",
+    name: "Inventory Clerk",
+    email: "inventory@josiahinnbar.com",
+    role: "user",
+    active: true,
+    createdAt: "2026-05-04T09:45:00.000Z",
+    updatedAt: "2026-05-21T12:10:00.000Z",
+  },
+  {
+    id: "u4",
+    name: "Night Manager",
+    email: "night.manager@josiahinnbar.com",
+    role: "admin",
+    active: false,
+    createdAt: "2026-04-28T11:00:00.000Z",
+    updatedAt: "2026-05-18T17:40:00.000Z",
+  },
+];
+
+export const mockStockEntries: DemoStockEntry[] = [
+  {
+    id: "st-1",
+    date: "2026-05-14",
+    notes: "Weekly replenishment for fast-moving beer lines",
+    items: [
+      {
+        id: "st-1a",
+        drinkId: "2",
+        drinkName: "Corona Extra",
+        quantity: 50,
+        supplier: "ABC Beverages",
+        notes: "Delivery 44",
+        unitPrice: 6.49,
+        costPrice: 4.45,
+      },
+      {
+        id: "st-1b",
+        drinkId: "1",
+        drinkName: "Heineken",
+        quantity: 36,
+        supplier: "ABC Beverages",
+        notes: "Chilled crate",
+        unitPrice: 5.99,
+        costPrice: 4.1,
+      },
+    ],
+  },
+  {
+    id: "st-2",
+    date: "2026-05-16",
+    notes: "Wine replenishment before the weekend",
+    items: [
+      {
+        id: "st-2a",
+        drinkId: "4",
+        drinkName: "Chardonnay",
+        quantity: 24,
+        supplier: "Wine Distributors Ltd",
+        notes: "",
+        unitPrice: 15.99,
+        costPrice: 11.8,
+      },
+      {
+        id: "st-2b",
+        drinkId: "6",
+        drinkName: "Merlot",
+        quantity: 18,
+        supplier: "Wine Distributors Ltd",
+        notes: "Promotional batch",
+        unitPrice: 16.49,
+        costPrice: 11.7,
+      },
+    ],
+  },
+  {
+    id: "st-3",
+    date: "2026-05-18",
+    notes: "Soft drinks and mixers top-up",
+    items: [
+      {
+        id: "st-3a",
+        drinkId: "14",
+        drinkName: "Coca-Cola",
+        quantity: 72,
+        supplier: "Bottlers Plus",
+        notes: "",
+        unitPrice: 2.49,
+        costPrice: 1.55,
+      },
+      {
+        id: "st-3b",
+        drinkId: "15",
+        drinkName: "Sprite",
+        quantity: 60,
+        supplier: "Bottlers Plus",
+        notes: "",
+        unitPrice: 2.49,
+        costPrice: 1.55,
+      },
+      {
+        id: "st-3c",
+        drinkId: "16",
+        drinkName: "Orange Juice",
+        quantity: 30,
+        supplier: "Fresh Press Suppliers",
+        notes: "Brunch stock",
+        unitPrice: 3.99,
+        costPrice: 2.6,
+      },
+    ],
+  },
+];
+
+export const mockOutingEntries: DemoOutingEntry[] = [
+  {
+    id: "out-1",
+    date: "2026-05-16",
+    type: "Sales",
+    notes: "Friday evening service",
+    items: [
+      {
+        id: "out-1a",
+        drinkId: "1",
+        drinkName: "Heineken",
+        quantity: 24,
+        unitPrice: 5.99,
+        costPrice: 4.1,
+      },
+      {
+        id: "out-1b",
+        drinkId: "11",
+        drinkName: "Mojito",
+        quantity: 18,
+        unitPrice: 12.99,
+        costPrice: 8.25,
+      },
+    ],
+  },
+  {
+    id: "out-2",
+    date: "2026-05-17",
+    type: "Hotel Refreshment",
+    notes: "Complimentary drinks for guests",
+    items: [
+      {
+        id: "out-2a",
+        drinkId: "16",
+        drinkName: "Orange Juice",
+        quantity: 12,
+        unitPrice: 3.99,
+        costPrice: 2.6,
+      },
+    ],
+  },
+  {
+    id: "out-3",
+    date: "2026-05-18",
+    type: "B&D",
+    notes: "Broken bottle write-off",
+    items: [
+      {
+        id: "out-3a",
+        drinkId: "7",
+        drinkName: "Jack Daniels",
+        quantity: 3,
+        unitPrice: 28.99,
+        costPrice: 22.8,
+      },
+    ],
+  },
+  {
+    id: "out-4",
+    date: "2026-05-20",
+    type: "Sales",
+    notes: "Midweek sales register close",
+    items: [
+      {
+        id: "out-4a",
+        drinkId: "4",
+        drinkName: "Chardonnay",
+        quantity: 8,
+        unitPrice: 15.99,
+        costPrice: 11.8,
+      },
+      {
+        id: "out-4b",
+        drinkId: "14",
+        drinkName: "Coca-Cola",
+        quantity: 28,
+        unitPrice: 2.49,
+        costPrice: 1.55,
+      },
+    ],
+  },
+  {
+    id: "out-5",
+    date: "2026-05-22",
+    type: "Sales",
+    notes: "Friday bar rush",
+    items: [
+      {
+        id: "out-5a",
+        drinkId: "2",
+        drinkName: "Corona Extra",
+        quantity: 16,
+        unitPrice: 6.49,
+        costPrice: 4.45,
+      },
+      {
+        id: "out-5b",
+        drinkId: "12",
+        drinkName: "Margarita",
+        quantity: 14,
+        unitPrice: 11.99,
+        costPrice: 7.9,
+      },
+    ],
+  },
+  {
+    id: "out-6",
+    date: "2026-05-24",
+    type: "Hotel Refreshment",
+    notes: "Sunday brunch service",
+    items: [
+      {
+        id: "out-6a",
+        drinkId: "15",
+        drinkName: "Sprite",
+        quantity: 20,
+        unitPrice: 2.49,
+        costPrice: 1.55,
+      },
+    ],
+  },
+];
+
+export const mockPriceChanges: DemoPriceChange[] = [
+  {
+    id: "pc-1",
+    drinkId: "1",
+    drinkName: "Heineken",
+    changeSummary: "Cost and selling price adjusted after supplier increase",
+    changedAt: "2026-05-15T08:30:00.000Z",
+    oldCostPrice: 4.1,
+    newCostPrice: 4.35,
+    oldSellingPrice: 5.99,
+    newSellingPrice: 6.29,
+    quantityOnHand: 145,
+    unitMarginBefore: 1.89,
+    unitMarginAfter: 1.94,
+    marginDelta: 0.05,
+    inventoryImpact: 7.25,
+  },
+  {
+    id: "pc-2",
+    drinkId: "4",
+    drinkName: "Chardonnay",
+    changeSummary: "Selling price rounded up for weekend service",
+    changedAt: "2026-05-18T11:00:00.000Z",
+    oldCostPrice: 11.8,
+    newCostPrice: 11.8,
+    oldSellingPrice: 15.99,
+    newSellingPrice: 16.49,
+    quantityOnHand: 34,
+    unitMarginBefore: 4.19,
+    unitMarginAfter: 4.69,
+    marginDelta: 0.5,
+    inventoryImpact: 17,
+  },
+  {
+    id: "pc-3",
+    drinkId: "7",
+    drinkName: "Jack Daniels",
+    changeSummary: "Supplier discount applied to spirits line",
+    changedAt: "2026-05-21T09:10:00.000Z",
+    oldCostPrice: 22.8,
+    newCostPrice: 22.1,
+    oldSellingPrice: 28.99,
+    newSellingPrice: 28.99,
+    quantityOnHand: 56,
+    unitMarginBefore: 6.19,
+    unitMarginAfter: 6.89,
+    marginDelta: 0.7,
+    inventoryImpact: 39.2,
+  },
+  {
+    id: "pc-4",
+    drinkId: "14",
+    drinkName: "Coca-Cola",
+    changeSummary: "Bulk pricing updated for soft drinks",
+    changedAt: "2026-05-23T14:45:00.000Z",
+    oldCostPrice: 1.55,
+    newCostPrice: 1.48,
+    oldSellingPrice: 2.49,
+    newSellingPrice: 2.49,
+    quantityOnHand: 198,
+    unitMarginBefore: 0.94,
+    unitMarginAfter: 1.01,
+    marginDelta: 0.07,
+    inventoryImpact: 13.86,
+  },
 ];
