@@ -39,7 +39,7 @@ export function Outing() {
               ...row,
               drinkId: value as string,
               drinkName: drink?.name || "",
-              price: drink?.unitPrice || 0,
+              price: drink?.sellingPrice || drink?.unitPrice || 0,
             };
           }
           return { ...row, [field]: value };
@@ -225,7 +225,7 @@ export function Outing() {
                             <option value="">Select drink...</option>
                             {drinks.map((drink) => (
                               <option key={drink.id} value={drink.id}>
-                                {drink.name} - Stock: {drink.quantity} - {formatNaira(drink.unitPrice)}
+                                {drink.name} - Stock: {drink.quantity} - {formatNaira(drink.sellingPrice)}
                               </option>
                             ))}
                           </select>
@@ -253,7 +253,7 @@ export function Outing() {
 
                       {row.drinkId && (
                         <div className="flex items-center justify-between text-sm">
-                          <span className="text-gray-400">Unit Price: {formatNaira(row.price)}</span>
+                          <span className="text-gray-400">Selling Price: {formatNaira(row.price)}</span>
                           <span className="font-bold text-green-400">Total: {formatNaira(row.quantity * row.price)}</span>
                         </div>
                       )}

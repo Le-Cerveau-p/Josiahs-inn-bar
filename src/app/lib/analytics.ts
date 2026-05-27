@@ -12,6 +12,7 @@ export type StockEntry = {
     supplier: string;
     notes?: string;
     unitPrice: number;
+    costPrice?: number;
   }>;
 };
 
@@ -26,7 +27,33 @@ export type OutingEntry = {
     drinkName: string;
     quantity: number;
     unitPrice: number;
+    costPrice?: number;
   }>;
+};
+
+export type PriceChangeEntry = {
+  id: string;
+  drinkId: string;
+  drinkName: string;
+  changeSummary: string;
+  changedAt: string;
+  oldCostPrice: number;
+  newCostPrice: number;
+  oldSellingPrice: number;
+  newSellingPrice: number;
+  quantityOnHand: number;
+  unitMarginBefore: number;
+  unitMarginAfter: number;
+  marginDelta: number;
+  inventoryImpact: number;
+};
+
+export type PriceChangeSummary = {
+  updates: number;
+  positiveImpact: number;
+  negativeImpact: number;
+  netImpact: number;
+  affectedDrinks: number;
 };
 
 export function getDrinkStatus(quantity: number): Drink["status"] {

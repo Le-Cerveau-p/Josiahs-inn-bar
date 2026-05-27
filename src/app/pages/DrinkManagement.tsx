@@ -12,18 +12,22 @@ export function DrinkManagement() {
   const [formData, setFormData] = useState({
     name: "",
     category: "Beer" as DrinkCategory,
-    price: "",
+    costPrice: "",
+    sellingPrice: "",
     quantity: "",
   });
 
   const editingDrink = useMemo(() => drinks.find((drink) => drink.id === editingId) ?? null, [drinks, editingId]);
+  const unitProfit = Number(formData.sellingPrice || 0) - Number(formData.costPrice || 0);
+  const margin = Number(formData.sellingPrice || 0) > 0 ? (unitProfit / Number(formData.sellingPrice || 0)) * 100 : 0;
 
   const openAddModal = () => {
     setEditingId(null);
     setFormData({
       name: "",
       category: "Beer",
-      price: "",
+      costPrice: "",
+      sellingPrice: "",
       quantity: "",
     });
     setShowAddModal(true);
@@ -32,11 +36,13 @@ export function DrinkManagement() {
   const openEditModal = (id: string) => {
     const drink = drinks.find((item) => item.id === id);
     if (!drink) return;
+
     setEditingId(id);
     setFormData({
       name: drink.name,
       category: drink.category,
-      price: String(drink.unitPrice),
+      costPrice: String(drink.costPrice),
+      sellingPrice: String(drink.sellingPrice),
       quantity: String(drink.quantity),
     });
     setShowAddModal(true);
@@ -54,7 +60,9 @@ export function DrinkManagement() {
       const payload = {
         name: formData.name,
         category: formData.category,
-        unitPrice: Number(formData.price),
+        costPrice: Number(formData.costPrice),
+        sellingPrice: Number(formData.sellingPrice),
+        unitPrice: Number(formData.sellingPrice),
         quantity: Number(formData.quantity) || 0,
         active: true,
       };
@@ -93,76 +101,90 @@ export function DrinkManagement() {
               <tr className="border-b border-gray-800">
                 <th className="px-4 py-4 text-left text-sm font-medium text-gray-400">Drink Name</th>
                 <th className="px-4 py-4 text-left text-sm font-medium text-gray-400">Category</th>
-                <th className="px-4 py-4 text-left text-sm font-medium text-gray-400">Price</th>
+                <th className="px-4 py-4 text-left text-sm font-medium text-gray-400">Cost Price</th>
+                <th className="px-4 py-4 text-left text-sm font-medium text-gray-400">Selling Price</th>
+                <th className="px-4 py-4 text-left text-sm font-medium text-gray-400">Profit / Unit</th>
                 <th className="px-4 py-4 text-left text-sm font-medium text-gray-400">Current Quantity</th>
                 <th className="px-4 py-4 text-left text-sm font-medium text-gray-400">Status</th>
                 <th className="px-4 py-4 text-left text-sm font-medium text-gray-400">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {drinks.map((drink) => (
-                <tr key={drink.id} className="border-b border-gray-800/50 transition-colors hover:bg-gray-800/30">
-                  <td className="px-4 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-green-500/20 to-emerald-600/20">
-                        <span className="text-lg">{drink.name.charAt(0)}</span>
+              {drinks.map((drink) => {
+                const profitPerUnit = drink.sellingPrice - drink.costPrice;
+
+                return (
+                  <tr key={drink.id} className="border-b border-gray-800/50 transition-colors hover:bg-gray-800/30">
+                    <td className="px-4 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-green-500/20 to-emerald-600/20">
+                          <span className="text-lg">{drink.name.charAt(0)}</span>
+                        </div>
+                        <span className="font-medium text-white">{drink.name}</span>
                       </div>
-                      <span className="font-medium text-white">{drink.name}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-4">
-                    <span className="rounded-full bg-gray-800/50 px-3 py-1 text-sm text-gray-300">{drink.category}</span>
-                  </td>
-                  <td className="px-4 py-4">
-                    <span className="font-medium text-white">{formatNaira(drink.unitPrice)}</span>
-                  </td>
-                  <td className="px-4 py-4">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className={`h-2 w-2 rounded-full ${
-                          drink.status === "In Stock" ? "bg-green-500" : drink.status === "Low Stock" ? "bg-orange-500" : "bg-red-500"
+                    </td>
+                    <td className="px-4 py-4">
+                      <span className="rounded-full bg-gray-800/50 px-3 py-1 text-sm text-gray-300">{drink.category}</span>
+                    </td>
+                    <td className="px-4 py-4">
+                      <span className="font-medium text-white">{formatNaira(drink.costPrice)}</span>
+                    </td>
+                    <td className="px-4 py-4">
+                      <span className="font-medium text-white">{formatNaira(drink.sellingPrice)}</span>
+                    </td>
+                    <td className="px-4 py-4">
+                      <span className={`font-medium ${profitPerUnit >= 0 ? "text-green-400" : "text-red-400"}`}>
+                        {formatNaira(profitPerUnit)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className={`h-2 w-2 rounded-full ${
+                            drink.status === "In Stock" ? "bg-green-500" : drink.status === "Low Stock" ? "bg-orange-500" : "bg-red-500"
+                          }`}
+                        />
+                        <span className="font-medium text-white">{drink.quantity}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-4">
+                      <span
+                        className={`rounded-full px-3 py-1 text-xs ${
+                          drink.status === "In Stock"
+                            ? "bg-green-500/20 text-green-400"
+                            : drink.status === "Low Stock"
+                            ? "bg-orange-500/20 text-orange-400"
+                            : "bg-red-500/20 text-red-400"
                         }`}
-                      />
-                      <span className="font-medium text-white">{drink.quantity}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-4">
-                    <span
-                      className={`rounded-full px-3 py-1 text-xs ${
-                        drink.status === "In Stock"
-                          ? "bg-green-500/20 text-green-400"
-                          : drink.status === "Low Stock"
-                          ? "bg-orange-500/20 text-orange-400"
-                          : "bg-red-500/20 text-red-400"
-                      }`}
-                    >
-                      {drink.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-4">
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => openEditModal(drink.id)}
-                        className="rounded-lg p-2 text-green-400 transition-colors hover:bg-green-500/10"
                       >
-                        <Edit className="h-4 w-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          if (window.confirm(`Delete ${drink.name}?`)) {
-                            await deleteDrink(drink.id);
-                          }
-                        }}
-                        className="rounded-lg p-2 text-red-400 transition-colors hover:bg-red-500/10"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                        {drink.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openEditModal(drink.id)}
+                          className="rounded-lg p-2 text-green-400 transition-colors hover:bg-green-500/10"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (window.confirm(`Delete ${drink.name}?`)) {
+                              await deleteDrink(drink.id);
+                            }
+                          }}
+                          className="rounded-lg p-2 text-red-400 transition-colors hover:bg-red-500/10"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -214,12 +236,25 @@ export function DrinkManagement() {
                 </div>
 
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-300">Unit Price (₦)</label>
+                  <label className="mb-2 block text-sm font-medium text-gray-300">Cost Price</label>
                   <input
                     type="number"
                     step="0.01"
-                    value={formData.price}
-                    onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                    value={formData.costPrice}
+                    onChange={(e) => setFormData({ ...formData, costPrice: e.target.value })}
+                    className="w-full rounded-xl border border-gray-700 bg-gray-800/50 px-4 py-3 text-white transition-all placeholder:text-gray-500 focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/50"
+                    placeholder="0.00"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-300">Selling Price</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={formData.sellingPrice}
+                    onChange={(e) => setFormData({ ...formData, sellingPrice: e.target.value })}
                     className="w-full rounded-xl border border-gray-700 bg-gray-800/50 px-4 py-3 text-white transition-all placeholder:text-gray-500 focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/50"
                     placeholder="0.00"
                     required
@@ -236,6 +271,23 @@ export function DrinkManagement() {
                     placeholder="0"
                     required
                   />
+                </div>
+
+                <div className="md:col-span-2">
+                  <div className="rounded-xl border border-gray-700 bg-gray-800/30 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                      <div>
+                        <div className="text-sm text-gray-400">Unit Profit</div>
+                        <div className={`text-lg font-bold ${unitProfit >= 0 ? "text-green-400" : "text-red-400"}`}>
+                          {formatNaira(unitProfit)}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm text-gray-400">Margin</div>
+                        <div className="text-lg font-bold text-white">{margin.toFixed(1)}%</div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="md:col-span-2">

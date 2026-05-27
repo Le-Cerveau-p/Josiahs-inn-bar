@@ -1,6 +1,15 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { api } from "../lib/api";
-import { buildCategoryData, buildMonthlyOutingData, buildWeeklyOutingData, getDrinkStatus, type OutingEntry, type StockEntry } from "../lib/analytics";
+import {
+  buildCategoryData,
+  buildMonthlyOutingData,
+  buildWeeklyOutingData,
+  getDrinkStatus,
+  type OutingEntry,
+  type PriceChangeEntry,
+  type PriceChangeSummary,
+  type StockEntry,
+} from "../lib/analytics";
 import { formatNaira } from "../lib/currency";
 import { categoryData, mockActivities, mockDrinks, salesChartData, weeklyOutingData, type Drink, type OutingType } from "../data/mockData";
 
@@ -19,7 +28,8 @@ type OutingItemInput = {
 type DrinkInput = {
   name: string;
   category: Drink["category"];
-  unitPrice: number;
+  costPrice: number;
+  sellingPrice: number;
   quantity?: number;
   active?: boolean;
 };
@@ -51,6 +61,10 @@ type DashboardPayload = {
 type AnalyticsPayload = {
   summary: {
     totalRevenue: number;
+    totalCost: number;
+    profit: number;
+    loss: number;
+    netProfitLoss: number;
     salesQuantity: number;
     bdQuantity: number;
     hotelQuantity: number;
@@ -63,6 +77,10 @@ type AnalyticsPayload = {
     quantity: number;
     salesQuantity: number;
     revenue: number;
+    cost: number;
+    profit: number;
+    loss: number;
+    netProfitLoss: number;
     outingType: OutingType | "All";
   }>;
   monthlyTrend: Array<{
@@ -71,9 +89,15 @@ type AnalyticsPayload = {
     bd: number;
     hotel: number;
     revenue: number;
+    cost: number;
+    profit: number;
+    loss: number;
+    netProfitLoss: number;
   }>;
   categoryData: Array<{ name: string; value: number }>;
   weeklyOutingData: Array<{ day: string; sales: number; bd: number; hotel: number }>;
+  priceChanges: PriceChangeEntry[];
+  priceChangeSummary: PriceChangeSummary;
 };
 
 type BarDataContextValue = {
@@ -95,39 +119,78 @@ type BarDataContextValue = {
 const BarDataContext = createContext<BarDataContextValue | null>(null);
 
 function normalizeDrink(drink: Drink): Drink {
+  const sellingPrice = Number.isFinite(drink.sellingPrice) ? drink.sellingPrice : drink.unitPrice;
+  const costPrice = Number.isFinite(drink.costPrice) ? drink.costPrice : Number((sellingPrice * 0.75).toFixed(2));
+
   return {
     ...drink,
+    unitPrice: sellingPrice,
+    sellingPrice,
+    costPrice,
     status: drink.quantity <= 0 ? "Out of Stock" : drink.quantity <= 15 ? "Low Stock" : "In Stock",
   };
 }
 
 async function loadFallbackAnalytics() {
+  const fallbackByDrink = mockDrinks.slice(0, 6).map((drink, index) => {
+    const quantity = 200 - index * 12;
+    const revenue = drink.sellingPrice * quantity;
+    const cost = drink.costPrice * quantity;
+    const netProfitLoss = revenue - cost;
+
+    return {
+      drinkId: drink.id,
+      drinkName: drink.name,
+      quantity,
+      salesQuantity: quantity,
+      revenue,
+      cost,
+      profit: Math.max(netProfitLoss, 0),
+      loss: Math.max(-netProfitLoss, 0),
+      netProfitLoss,
+      outingType: "All" as const,
+    };
+  });
+
+  const totalRevenue = salesChartData[salesChartData.length - 1]?.revenue ?? 0;
+  const totalCost = Number((totalRevenue * 0.72).toFixed(2));
+  const netProfitLoss = totalRevenue - totalCost;
+
   return {
     summary: {
-      totalRevenue: 71800,
+      totalRevenue,
+      totalCost,
+      profit: Math.max(netProfitLoss, 0),
+      loss: Math.max(-netProfitLoss, 0),
+      netProfitLoss,
       salesQuantity: 21300,
       bdQuantity: 1560,
       hotelQuantity: 1890,
       totalItems: mockDrinks.length,
       uniqueDrinks: mockDrinks.length,
     },
-    byDrink: mockDrinks.slice(0, 6).map((drink, index) => ({
-      drinkId: drink.id,
-      drinkName: drink.name,
-      quantity: 200 - index * 12,
-      salesQuantity: 200 - index * 12,
-      revenue: 1200 - index * 60,
-      outingType: "All" as const,
-    })),
+    byDrink: fallbackByDrink,
     monthlyTrend: salesChartData.map((item) => ({
       month: item.month,
       sales: item.sales,
       bd: 0,
       hotel: 0,
       revenue: item.revenue,
+      cost: Number((item.revenue * 0.72).toFixed(2)),
+      profit: Number((item.revenue * 0.28).toFixed(2)),
+      loss: 0,
+      netProfitLoss: Number((item.revenue * 0.28).toFixed(2)),
     })),
     categoryData,
     weeklyOutingData,
+    priceChanges: [],
+    priceChangeSummary: {
+      updates: 0,
+      positiveImpact: 0,
+      negativeImpact: 0,
+      netImpact: 0,
+      affectedDrinks: 0,
+    },
   };
 }
 

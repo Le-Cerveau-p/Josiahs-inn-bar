@@ -33,6 +33,10 @@ const COLORS = ["#10b981", "#3b82f6", "#8b5cf6", "#f59e0b", "#ec4899"];
 const emptyAnalytics = {
   summary: {
     totalRevenue: 0,
+    totalCost: 0,
+    profit: 0,
+    loss: 0,
+    netProfitLoss: 0,
     salesQuantity: 0,
     bdQuantity: 0,
     hotelQuantity: 0,
@@ -43,6 +47,14 @@ const emptyAnalytics = {
   monthlyTrend: [],
   categoryData: [],
   weeklyOutingData: [],
+  priceChanges: [],
+  priceChangeSummary: {
+    updates: 0,
+    positiveImpact: 0,
+    negativeImpact: 0,
+    netImpact: 0,
+    affectedDrinks: 0,
+  },
 };
 
 function getRangeBounds(range: string) {
@@ -123,34 +135,59 @@ export function Analytics() {
     {
       title: "Total Revenue",
       value: formatNaira(analytics.summary.totalRevenue),
-      trend: "+22.8%",
+      trend: "Sales only",
       icon: DollarSign,
       color: "from-green-500 to-emerald-600",
     },
     {
-      title: "Sales Quantity",
-      value: analytics.summary.salesQuantity.toLocaleString(),
-      trend: "+15%",
+      title: "Gross Profit",
+      value: formatNaira(analytics.summary.profit),
+      trend: "Sales less cost",
       icon: TrendingUp,
       color: "from-blue-500 to-blue-600",
     },
     {
-      title: "Damaged & Broken Quantity",
-      value: analytics.summary.bdQuantity.toLocaleString(),
-      trend: "Month to date",
+      title: "Gross Loss",
+      value: formatNaira(analytics.summary.loss),
+      trend: "B&D and markdowns",
+      icon: TrendingDown,
+      color: "from-red-500 to-rose-600",
+    },
+    {
+      title: "Net Profit / Loss",
+      value:
+        analytics.summary.netProfitLoss >= 0
+          ? formatNaira(analytics.summary.netProfitLoss)
+          : `-${formatNaira(Math.abs(analytics.summary.netProfitLoss))}`,
+      trend: analytics.summary.netProfitLoss >= 0 ? "Profit" : "Loss",
+      icon: BarChart3,
+      color: analytics.summary.netProfitLoss >= 0 ? "from-emerald-500 to-green-600" : "from-orange-500 to-red-600",
+    },
+    {
+      title: "Sales Quantity",
+      value: analytics.summary.salesQuantity.toLocaleString(),
+      trend: "Recorded sales units",
       icon: Award,
       color: "from-purple-500 to-purple-600",
     },
     {
-      title: "Hotel Refreshments",
-      value: analytics.summary.hotelQuantity.toLocaleString(),
-      trend: "Month to date",
+      title: "Damaged & Broken",
+      value: analytics.summary.bdQuantity.toLocaleString(),
+      trend: "Inventory losses",
       icon: TrendingDown,
       color: "from-orange-500 to-orange-600",
+    },
+    {
+      title: "Hotel Refreshments",
+      value: analytics.summary.hotelQuantity.toLocaleString(),
+      trend: "Complimentary items",
+      icon: Download,
+      color: "from-cyan-500 to-sky-600",
     },
   ];
 
   const topDrink = analytics.byDrink[0];
+  const recentPriceChanges = analytics.priceChanges.slice(0, 5);
 
   return (
     <div className="space-y-6">
@@ -240,17 +277,108 @@ export function Analytics() {
           const Icon = card.icon;
           return (
             <div key={card.title} className={`rounded-2xl border border-white/10 bg-gradient-to-br ${card.color} p-6`}>
-              <div className="mb-4 flex items-start justify-between">
+              <div className="mb-4 flex items-start gap-3">
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-black/20">
                   <Icon className="h-6 w-6 text-white" />
                 </div>
-                <span className="text-sm font-medium text-white/80">{card.trend}</span>
+                <span className="ml-auto max-w-[65%] text-right text-sm font-medium leading-tight text-white/80">
+                  {card.trend}
+                </span>
               </div>
               <div className="mb-1 text-3xl font-bold text-white">{card.value}</div>
               <div className="text-sm text-white/80">{card.title}</div>
             </div>
           );
         })}
+      </div>
+
+      <div className="rounded-2xl border border-green-900/20 bg-gray-900/50 p-6 backdrop-blur-xl">
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h3 className="text-lg font-bold text-white">Price Change Impact</h3>
+            <p className="text-sm text-gray-400">
+              Every admin price update is recorded here so you can see the margin shift and the value it adds or removes from stock on hand.
+            </p>
+          </div>
+          <div className="rounded-xl bg-gray-800/30 px-3 py-2 text-right">
+            <div className="text-xs uppercase tracking-wide text-gray-400">Updates</div>
+            <div className="text-lg font-bold text-white">{analytics.priceChangeSummary.updates}</div>
+          </div>
+        </div>
+
+        <div className="mb-6 grid grid-cols-1 gap-3 md:grid-cols-4">
+          <div className="rounded-xl bg-gray-800/30 p-3">
+            <div className="text-xs text-gray-400">Net impact</div>
+            <div
+              className={`text-lg font-bold ${
+                analytics.priceChangeSummary.netImpact >= 0 ? "text-green-400" : "text-red-400"
+              }`}
+            >
+              {analytics.priceChangeSummary.netImpact >= 0 ? "+" : "-"}
+              {formatNaira(Math.abs(analytics.priceChangeSummary.netImpact))}
+            </div>
+          </div>
+          <div className="rounded-xl bg-gray-800/30 p-3">
+            <div className="text-xs text-gray-400">Positive impact</div>
+            <div className="text-lg font-bold text-green-400">{formatNaira(analytics.priceChangeSummary.positiveImpact)}</div>
+          </div>
+          <div className="rounded-xl bg-gray-800/30 p-3">
+            <div className="text-xs text-gray-400">Negative impact</div>
+            <div className="text-lg font-bold text-red-400">{formatNaira(analytics.priceChangeSummary.negativeImpact)}</div>
+          </div>
+          <div className="rounded-xl bg-gray-800/30 p-3">
+            <div className="text-xs text-gray-400">Affected drinks</div>
+            <div className="text-lg font-bold text-white">{analytics.priceChangeSummary.affectedDrinks}</div>
+          </div>
+        </div>
+
+        {recentPriceChanges.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-800">
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-400">Drink</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-400">Changed</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-400">Price Move</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-400">Margin Delta</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-400">Stock Impact</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentPriceChanges.map((change) => (
+                  <tr key={change.id} className="border-b border-gray-800/50 transition-colors hover:bg-gray-800/30">
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-white">{change.drinkName}</div>
+                      <div className="text-xs text-gray-400">{change.changeSummary}</div>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-300">{change.changedAt.slice(0, 10)}</td>
+                    <td className="px-4 py-3 text-sm text-gray-300">
+                      <div>
+                        Cost: {formatNaira(change.oldCostPrice)} {"->"} {formatNaira(change.newCostPrice)}
+                      </div>
+                      <div>
+                        Selling: {formatNaira(change.oldSellingPrice)} {"->"} {formatNaira(change.newSellingPrice)}
+                      </div>
+                    </td>
+                    <td className={`px-4 py-3 text-sm font-medium ${change.marginDelta >= 0 ? "text-green-400" : "text-red-400"}`}>
+                      {change.marginDelta >= 0 ? "+" : "-"}
+                      {formatNaira(Math.abs(change.marginDelta))}
+                    </td>
+                    <td className={`px-4 py-3 text-sm font-medium ${change.inventoryImpact >= 0 ? "text-green-400" : "text-red-400"}`}>
+                      {change.inventoryImpact >= 0 ? "+" : "-"}
+                      {formatNaira(Math.abs(change.inventoryImpact))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-dashed border-gray-700 bg-gray-800/20 p-4 text-sm text-gray-400">
+            No recorded price changes yet. Once a drink&apos;s cost or selling price is updated, the analytics log will start showing the
+            margin effect here.
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -367,6 +495,8 @@ export function Analytics() {
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-400">Drink</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-400">Qty</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-400">Revenue</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-400">Cost</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-400">Profit / Loss</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-400">Type</th>
                 </tr>
               </thead>
@@ -377,6 +507,12 @@ export function Analytics() {
                       <td className="px-4 py-3 text-sm font-medium text-white">{item.drinkName}</td>
                       <td className="px-4 py-3 text-sm text-gray-300">{item.quantity.toLocaleString()}</td>
                       <td className="px-4 py-3 text-sm text-green-400">{formatNaira(item.revenue)}</td>
+                      <td className="px-4 py-3 text-sm text-gray-300">{formatNaira(item.cost)}</td>
+                      <td className={`px-4 py-3 text-sm font-medium ${item.netProfitLoss >= 0 ? "text-green-400" : "text-red-400"}`}>
+                        {item.netProfitLoss >= 0
+                          ? formatNaira(item.netProfitLoss)
+                          : `-${formatNaira(Math.abs(item.netProfitLoss))}`}
+                      </td>
                       <td className="px-4 py-3">
                         <span className="rounded-full bg-gray-800/50 px-2 py-1 text-xs text-gray-300">{item.outingType}</span>
                       </td>
@@ -384,7 +520,7 @@ export function Analytics() {
                   ))
                 ) : (
                   <tr>
-                    <td className="px-4 py-4 text-sm text-gray-400" colSpan={4}>
+                    <td className="px-4 py-4 text-sm text-gray-400" colSpan={6}>
                       No analytics data for the selected range.
                     </td>
                   </tr>
@@ -405,6 +541,18 @@ export function Analytics() {
               <div className="flex items-center justify-between rounded-xl bg-gray-800/30 p-3">
                 <span className="text-sm text-gray-400">Unique Drinks</span>
                 <span className="font-bold text-white">{analytics.summary.uniqueDrinks}</span>
+              </div>
+              <div className="flex items-center justify-between rounded-xl bg-gray-800/30 p-3">
+                <span className="text-sm text-gray-400">Total Cost</span>
+                <span className="font-bold text-white">{formatNaira(analytics.summary.totalCost)}</span>
+              </div>
+              <div className="flex items-center justify-between rounded-xl bg-gray-800/30 p-3">
+                <span className="text-sm text-gray-400">Net Profit / Loss</span>
+                <span className={`font-bold ${analytics.summary.netProfitLoss >= 0 ? "text-green-400" : "text-red-400"}`}>
+                  {analytics.summary.netProfitLoss >= 0
+                    ? formatNaira(analytics.summary.netProfitLoss)
+                    : `-${formatNaira(Math.abs(analytics.summary.netProfitLoss))}`}
+                </span>
               </div>
               <div className="flex items-center justify-between rounded-xl bg-gray-800/30 p-3">
                 <span className="text-sm text-gray-400">Top Drink</span>

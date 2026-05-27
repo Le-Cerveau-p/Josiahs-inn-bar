@@ -109,7 +109,9 @@ export function Inventory() {
                 <th className="px-4 py-4 text-left text-sm font-medium text-gray-400">Drink Name</th>
                 <th className="px-4 py-4 text-left text-sm font-medium text-gray-400">Category</th>
                 <th className="px-4 py-4 text-left text-sm font-medium text-gray-400">Quantity</th>
-                <th className="px-4 py-4 text-left text-sm font-medium text-gray-400">Unit Price</th>
+                <th className="px-4 py-4 text-left text-sm font-medium text-gray-400">Cost Price</th>
+                <th className="px-4 py-4 text-left text-sm font-medium text-gray-400">Selling Price</th>
+                <th className="px-4 py-4 text-left text-sm font-medium text-gray-400">Profit / Unit</th>
                 <th className="px-4 py-4 text-left text-sm font-medium text-gray-400">Last Updated</th>
                 <th className="px-4 py-4 text-left text-sm font-medium text-gray-400">Status</th>
                 <th className="px-4 py-4 text-left text-sm font-medium text-gray-400">Actions</th>
@@ -140,7 +142,11 @@ export function Inventory() {
                         <span className="font-medium text-white">{drink.quantity}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-4 font-medium text-white">{formatNaira(drink.unitPrice)}</td>
+                    <td className="px-4 py-4 font-medium text-white">{formatNaira(drink.costPrice)}</td>
+                    <td className="px-4 py-4 font-medium text-white">{formatNaira(drink.sellingPrice)}</td>
+                    <td className={`px-4 py-4 font-medium ${drink.sellingPrice - drink.costPrice >= 0 ? "text-green-400" : "text-red-400"}`}>
+                      {formatNaira(drink.sellingPrice - drink.costPrice)}
+                    </td>
                     <td className="px-4 py-4 text-sm text-gray-300">{drink.lastUpdated}</td>
                     <td className="px-4 py-4">
                       <span
@@ -172,7 +178,7 @@ export function Inventory() {
                 ))
               ) : (
                 <tr>
-                  <td className="px-4 py-6 text-sm text-gray-400" colSpan={7}>
+                  <td className="px-4 py-6 text-sm text-gray-400" colSpan={9}>
                     No drinks match the current filters.
                   </td>
                 </tr>
